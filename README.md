@@ -4,7 +4,7 @@ A working prototype for the Flexiple product assignment: a sourced shortlist for
 
 Field does not try to be a census of 2,117 centres. It takes a mandate — function, headcount, and what you refuse to get wrong — and ranks six cities. Every measured figure is cited. Talent, speed, room and incentives are labeled as readings. Where the file has no number, the cell stays blank, including company headcount and any pay band that is not a software-engineer median.
 
-Ask the file sends the question to a model with the file as its only source. A reply that contains a figure the file does not hold is discarded. Put a key in `.env` as `FIELD_API_KEY` (see `.env.example`), or paste an Anthropic, Gemini, Groq, or OpenAI key into the page. A pasted key stays in the browser tab.
+Ask the file answers from the file when no model key is configured. Company headcount stays blank. A key is optional. If `.env` sets `FIELD_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, or `OPENAI_API_KEY` (see `field/.env.example`), a model may write the reply, and a figure the file does not hold is discarded. The review demo does not need a key.
 
 ## Run it
 
@@ -19,7 +19,7 @@ Open http://localhost:5173.
 
 `npm run check` asserts the rankings the deck depends on: a normally weighted engineering centre lands on Hyderabad, paying for the deepest bench lands on Bengaluru, a cost-first centre of 150 lands on Chennai and flips at 400 people, BFSI drops pay out of the math, and a question about Goldman Sachs’ India headcount is refused.
 
-The deck is `Field.pptx`, one folder up from this project.
+The deployed prototype is https://field-virid.vercel.app/. The deck submitted with it is `Field.pptx`.
 
 ## What a reviewer should click
 
