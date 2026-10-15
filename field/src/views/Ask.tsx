@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import type { Answer } from "../ask";
+import { ask, type Answer } from "../ask";
 
 const PROMPTS = [
   "How many GCCs are in India?",
@@ -20,52 +20,48 @@ export function Ask() {
   const [query, setQuery] = useState(PROMPTS[4]);
   const [result, setResult] = useState<ModelAnswer | null>(null);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-  const [needsKey, setNeedsKey] = useState(false);
   const [key, setKey] = useState("");
   const [serverHasKey, setServerHasKey] = useState(false);
 
   useEffect(() => {
     const saved = sessionStorage.getItem(KEY_STORAGE) ?? "";
     setKey(saved);
+    if (!saved) setResult(ask(PROMPTS[4]));
     fetch("/api/ask/status")
-      .then((response) => response.json())
-      .then((status: { configured?: boolean }) => {
+      .then(async (response) => {
+        if (!response.ok) throw new Error("status");
+        return (await response.json()) as { configured?: boolean };
+      })
+      .then((status) => {
         const configured = Boolean(status.configured);
         setServerHasKey(configured);
-        if (configured || saved) {
-          void run(PROMPTS[4], saved, configured);
-        } else {
-          setNeedsKey(true);
-        }
+        if (configured || saved) void run(PROMPTS[4], saved, configured);
       })
-      .catch(() => setNeedsKey(true));
+      .catch(() => setResult(ask(PROMPTS[4])));
   }, []);
 
   async function run(text: string, apiKey = key, configured = serverHasKey) {
     setQuery(text);
-    setError("");
+    const trimmed = apiKey.trim();
+    if (!configured && !trimmed) {
+      setResult(ask(text));
+      return;
+    }
     setPending(true);
     try {
       const response = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: text, apiKey: apiKey.trim() || undefined }),
+        body: JSON.stringify({ question: text, apiKey: trimmed || undefined }),
       });
       const payload = (await response.json()) as ModelAnswer & { error?: string; needsKey?: boolean };
-      if (payload.needsKey || (!configured && !apiKey.trim() && response.status === 503)) {
-        setNeedsKey(true);
-        setResult(null);
+      if (!response.ok || payload.needsKey) {
+        setResult(ask(text));
         return;
       }
-      if (!response.ok) {
-        setError(payload.error || "The model request failed.");
-        return;
-      }
-      setNeedsKey(false);
       setResult(payload);
     } catch {
-      setError("The model could not be reached.");
+      setResult(ask(text));
     } finally {
       setPending(false);
     }
@@ -76,19 +72,13 @@ export function Ask() {
     void run(query);
   }
 
-  function saveKey(event: FormEvent) {
-    event.preventDefault();
-    sessionStorage.setItem(KEY_STORAGE, key.trim());
-    void run(query, key.trim(), serverHasKey);
-  }
-
   return (
     <div className="sheet">
       <header className="lede">
         <p className="kicker">Ask the file</p>
-        <h1>A model writes the reply. The file sets the limit.</h1>
+        <h1>The file answers. A model may only write from it.</h1>
         <p className="dek">
-          The model answers in its own words. It is only allowed to use this file. If you ask for a number the file does not have, the reply is thrown away or declined.
+          With no model key, the file answers directly. Headcount stays blank. If a key is configured later, a model may write the reply, and a figure the file does not hold is thrown away.
         </p>
       </header>
 
@@ -114,30 +104,9 @@ export function Ask() {
         </div>
       </form>
 
-      {needsKey && (
-        <form className="keybox" onSubmit={saveKey}>
-          <p>Paste a model key to turn this on. Anthropic starts with sk-ant-, Gemini with AQ. or AIza, Groq with gsk_, OpenAI with sk-. It stays in this browser tab.</p>
-          <div className="ask-row">
-            <input
-              type="password"
-              value={key}
-              onChange={(event) => setKey(event.target.value)}
-              placeholder="Paste the key"
-              aria-label="Model key"
-              autoComplete="off"
-            />
-            <button type="submit" className="solid" disabled={pending || key.trim().length < 10}>
-              Use key
-            </button>
-          </div>
-        </form>
-      )}
-
-      {error && <p className="key-error">{error}</p>}
-
       {result && (
         <article className={result.refused ? "reply refused" : "reply"} aria-live="polite">
-          <p className="kicker">{result.refused ? "Declined" : "Written by the model"}</p>
+          <p className="kicker">{result.refused ? "Declined" : result.model ? "Written by the model" : "From the file"}</p>
           <h2>{result.title}</h2>
           {result.paragraphs.map((paragraph, index) => (
             <p key={`${index}-${paragraph}`}>{paragraph}</p>
@@ -149,7 +118,11 @@ export function Ask() {
               ))}
             </ol>
           )}
-          {result.model && <p className="fine">Model: {result.model}. Checked against the file before it was shown.</p>}
+          {result.model ? (
+            <p className="fine">Model: {result.model}. Checked against the file before it was shown.</p>
+          ) : (
+            <p className="fine">Answered from the file. No model key is configured.</p>
+          )}
         </article>
       )}
     </div>
